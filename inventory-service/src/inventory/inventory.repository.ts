@@ -14,6 +14,15 @@ export class InventoryRepository {
     });
   }
 
+    async findBySku(sku: string): Promise<PerStoreInventory[]> {
+    return this.prisma.perStoreInventory.findMany({
+      where: { sku },
+      orderBy: { storeId: 'asc' }
+    });
+  }
+
+
+
   async upsertInventory(data: {
     storeId: string;
     sku: string;

@@ -1,25 +1,77 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InventoryResponseDto } from 'src/inventory/dto/inventory-response.dto';
-import { InventoryRepository } from 'src/inventory/inventory.repository';
-
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { InventoryResponseDto } from './dto/inventory-response.dto';
+import { PerStoreInventory } from '@prisma/client';
+import { InventoryRepository } from './inventory.repository';
 
 @Injectable()
 export class InventoryService {
+  private readonly logger = new Logger(InventoryService.name);
+
   constructor(private readonly inventoryRepository: InventoryRepository) {}
 
-  async consultarInventario(storeId: string, sku: string): Promise<InventoryResponseDto> {
-    const inventory = await this.inventoryRepository.findByStoreAndSku(storeId, sku);
-    
-    if (!inventory) {
-      throw new NotFoundException(`Inventario nao encontrado da loja ${storeId} e SKU ${sku}`);
-    }
+  async consultarInventario(
+    sku: string, 
+    storeId?: string, 
+    includeStores: boolean = false
+  ): Promise<InventoryResponseDto> {
+    this.logger.log(`🔍 Consultando inventário para SKU ${sku}`, {
+      sku,
+      storeId,
+      includeStores
+    });
 
-    return {
-      storeId: inventory.storeId,
-      sku: inventory.sku,
-      quantity: inventory.quantity,
-      version: inventory.version,
-      updatedAt: inventory.updatedAt
-    };
+    try {
+      let inventories: PerStoreInventory[];
+      
+      if (storeId) {
+        // Consulta específica por loja
+        const inventory = await this.inventoryRepository.findByStoreAndSku(storeId, sku);
+        if (!inventory) {
+          this.logger.warn(`Inventário não encontrado para store ${storeId} e SKU ${sku}`);
+          throw new NotFoundException(`Inventory not found for store ${storeId} and SKU ${sku}`);
+        }
+        inventories = [inventory];
+      } else {
+        // Consulta por SKU em todas as lojas
+        inventories = await this.inventoryRepository.findBySku(sku);
+        if (inventories.length === 0) {
+          this.logger.warn(`Nenhum inventário encontrado para SKU ${sku}`);
+          throw new NotFoundException(`No inventory found for SKU ${sku}`);
+        }
+      }
+
+      // Calcular total 
+      const totalQuantity = inventories.reduce((sum, inv) => sum + inv.quantity, 0);
+
+      // Preparar resposta
+      const response = new InventoryResponseDto();
+      response.sku = sku;
+      response.totalQuantity = totalQuantity;
+      
+      if (includeStores) {
+        response.perStore = inventories.map((inv: PerStoreInventory) => ({
+          storeId: inv.storeId,
+          quantity: inv.quantity,
+          version: inv.version,
+          updatedAt: inv.updatedAt
+        }));
+      }
+
+      this.logger.log(`Inventário consultado com sucesso para SKU ${sku}`, {
+        sku,
+        totalQuantity,
+        storeCount: inventories.length,
+        includeStores
+      });
+
+      return response;
+    } catch (error) {
+      this.logger.error(`Erro ao consultar inventário para SKU ${sku}`, {
+        sku,
+        storeId,
+        error: error.message
+      });
+      throw error;
+    }
   }
 } 

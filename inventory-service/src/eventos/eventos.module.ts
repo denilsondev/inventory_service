@@ -3,12 +3,12 @@ import { EventosController } from './eventos.controller';
 import { EventosService } from './eventos.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { InventoryModule } from '../inventory/inventory.module';
+import { MetricsModule } from '../metrics/metrics.module';
 import { EventRepository } from './repository/event.repository';
 
-
 @Module({
-  imports: [PrismaModule, InventoryModule],
+  imports: [PrismaModule, InventoryModule, MetricsModule],
   controllers: [EventosController],
-  providers: [EventosService, EventRepository]
+  providers: [EventosService, EventRepository /* outros providers */],
 })
 export class EventosModule {}
