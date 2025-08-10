@@ -1,0 +1,27 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model PerStoreInventory {
+  storeId   String
+  sku       String
+  quantity  Int
+  version   Int
+  updatedAt DateTime @default(now())
+
+  @@id([storeId, sku])
+  @@index([sku], name: "idx_inventory_sku")
+}
+
+model SeenEvent {
+  eventId    String   @id
+  createdAt  DateTime @default(now())
+}
