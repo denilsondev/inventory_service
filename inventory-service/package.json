@@ -17,7 +17,10 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "simulate": "node simulator.js",
+    "simulate:fast": "node -e \"require('./simulator-config.json').simulation.eventInterval=500; require('./simulator.js')\"",
+    "simulate:continuous": "node -e \"require('./simulator-config.json').simulation.totalEvents=1000; require('./simulator.js')\""
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

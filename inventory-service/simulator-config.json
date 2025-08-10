@@ -1,0 +1,38 @@
+{
+  "api": {
+    "baseUrl": "http://localhost:4000",
+    "endpoint": "/v1/events/stock-adjusted",
+    "timeout": 5000,
+    "retries": 3,
+    "retryDelay": 1000
+  },
+  "simulation": {
+    "eventInterval": 2000,
+    "totalEvents": 100,
+    "duplicationChance": 0.1,
+    "salesRatio": 0.8,
+    "restockRatio": 0.2
+  },
+  "stores": [
+    "store_001",
+    "store_002", 
+    "store_003"
+  ],
+  "products": [
+    {
+      "sku": "PROD_ABC123",
+      "initialQuantity": 100,
+      "initialVersion": 1
+    },
+    {
+      "sku": "PROD_DEF456", 
+      "initialQuantity": 50,
+      "initialVersion": 1
+    },
+    {
+      "sku": "PROD_GHI789",
+      "initialQuantity": 75,
+      "initialVersion": 1
+    }
+  ]
+} 
