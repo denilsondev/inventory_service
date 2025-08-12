@@ -39,7 +39,7 @@ export class MetricsService {
   }
 
   // Incrementar contador de eventos ignorados por motivo
-  incrementEventsIgnored(reason: 'duplicate' | 'stale'): void {
+  incrementaEventoIgnorado(reason: 'duplicado' | 'desatualizado'): void {
     this.eventsIgnoredTotal.inc({ reason });
   }
 

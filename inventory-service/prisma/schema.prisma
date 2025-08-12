@@ -10,18 +10,20 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model PerStoreInventory {
-  storeId   String
-  sku       String
-  quantity  Int
-  version   Int
-  updatedAt DateTime @default(now())
 
-  @@id([storeId, sku])
-  @@index([sku], name: "idx_inventory_sku")
+model InventarioPorLoja {
+  idLoja        String   
+  sku           String   
+  quantidade    Int      
+  versao        Int      // Número da versão para controle de concorrência
+  atualizadoEm  DateTime @default(now()) 
+
+  @@id([idLoja, sku]) // Chave primária composta: loja + produto
+  @@index([sku], name: "idx_inventario_sku") // Índice para consultas por produto
 }
 
-model SeenEvent {
-  eventId    String   @id
-  createdAt  DateTime @default(now())
+
+model EventoProcessado {
+  idEvento  String   @id 
+  criadoEm  DateTime @default(now()) 
 }

@@ -1,6 +1,7 @@
-import { Injectable, ConflictException, BadRequestException, Logger } from '@nestjs/common';
-import { StockAdjustedEventDto } from './dto/stock-adjusted.dto';
-import { StockAdjustedResponseDto } from './dto/stock-adjusted-response.dto';
+import { Injectable, Logger } from '@nestjs/common';
+import { EstoqueAjustadoEventoDto } from './dto/estoque-ajustado.dto';
+import { EstoqueAjustadoResponseDto } from './dto/estoque-ajustado-response.dto';
+import { InventarioPorLoja } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { InventoryRepository } from 'src/inventory/inventory.repository';
@@ -18,112 +19,127 @@ export class EventosService {
     private readonly metricsService: MetricsService
   ) {}
 
-  async receberAjusteEstoque(dto: StockAdjustedEventDto): Promise<StockAdjustedResponseDto> {
-    this.logger.log(`Recebendo evento de ajuste de estoque: ${dto.eventId}`, {
-      eventId: dto.eventId,
-      storeId: dto.storeId,
-      sku: dto.sku,
-      delta: dto.delta,
-      version: dto.version
-    });
+  async receberAjusteEstoque(dto: EstoqueAjustadoEventoDto): Promise<EstoqueAjustadoResponseDto> {
+    this.logger.log(`Recebendo evento de ajuste de estoque: ${dto.idEvento}`, dto);
 
     try {
-      // Verificar se evento já foi processado
-      this.logger.debug(`Verificando se evento ${dto.eventId} já foi processado`);
-      const existingEvent = await this.eventRepository.findByEventId(dto.eventId);
-      if (existingEvent) {
-        this.logger.warn(`Evento ${dto.eventId} já foi processado anteriormente`);
-
-        this.metricsService.incrementEventsIgnored('duplicate');
-        
-        // Buscar inventário atual para retornar status
-        const currentInventory = await this.inventoryRepository.findByStoreAndSku(dto.storeId, dto.sku);
-
-        const response = new StockAdjustedResponseDto();
-        response.applied = false;
-        response.status = 'duplicate_event';
-        response.currentVersion = currentInventory?.version ?? 0;
-        response.currentQuantity = currentInventory?.quantity ?? 0;
-
-        return response;
+      const eventoExistente = await this.eventRepository.findByEventId(dto.idEvento);
+      if (eventoExistente) {
+        return this.lancarEventoDuplicado(dto);
       }
 
-      // Buscar inventário atual para comparar versões
-      this.logger.debug(`Buscando inventário atual para store ${dto.storeId} e SKU ${dto.sku}`);
-      const currentInventory = await this.inventoryRepository.findByStoreAndSku(dto.storeId, dto.sku);
-      
       // Verificar se versão do evento é válida
-      if (currentInventory && dto.version <= currentInventory.version) {
-        this.logger.warn(`Versão do evento ${dto.version} não é válida. Versão atual: ${currentInventory.version}`);
-
-        this.metricsService.incrementEventsIgnored('stale');
-        
-        const response = new StockAdjustedResponseDto();
-        response.applied = false;
-        response.status = 'stale_version';
-        response.currentVersion = currentInventory.version;
-        response.currentQuantity = currentInventory.quantity;
-
-        return response;
+      const estoqueAtual = await this.inventoryRepository.findByStoreAndSku(dto.idLoja, dto.sku);
+      
+      if (estoqueAtual && dto.versao <= estoqueAtual.versao) {
+        return this.lancarVersaoDesatualizada(dto, estoqueAtual);
       }
 
       // Detectar gap de versão (pulo de versão)
-      let gapDetected = false;
-      if (currentInventory && dto.version > currentInventory.version + 1) {
-        gapDetected = true;
-        this.logger.warn(`Gap de versão detectado! Versão atual: ${currentInventory.version}, Versão do evento: ${dto.version}`);
-        this.metricsService.incrementGapDetected();
-      }
-
-      this.logger.log(`Validações passaram. Iniciando transação para evento ${dto.eventId}`);
+      const gapDetected = this.detectarGap(dto, estoqueAtual);
 
       // Executar operações em transação para garantir atomicidade
-      const updatedInventory = await this.prisma.$transaction(async (tx) => {
-        this.logger.debug(`Executando transação para evento ${dto.eventId}`);
-
-        // Calcular nova quantidade aplicando o delta
-        const currentQuantity = currentInventory?.quantity ?? 0;
-        const newQuantity = currentQuantity + dto.delta;
-
-        // Aplicar ajuste no inventário usando o repository
-        const inventory = await this.inventoryRepository.upsertInventoryInTransaction(tx, {
-          storeId: dto.storeId,
-          sku: dto.sku,
-          quantity: newQuantity, // Nova quantidade calculada
-          version: dto.version
-        });
-
-        // Marcar evento como processado usando o repository
-        await this.eventRepository.markEventAsProcessedInTransaction(tx, dto.eventId);
-
-        this.logger.debug(`Transação concluída com sucesso para evento ${dto.eventId}`);
-        return inventory;
-      });
+      const estoqueAtualizado = await this.processarTransacao(dto, estoqueAtual);
 
       this.metricsService.incrementEventsApplied();
 
-      const response = new StockAdjustedResponseDto();
-      response.applied = true;
-      response.status = gapDetected ? 'gap_detected' : 'applied';
-      response.currentVersion = updatedInventory.version;
-      response.currentQuantity = updatedInventory.quantity;
-
-      this.logger.log(`Evento ${dto.eventId} processado com sucesso`, {
-        eventId: dto.eventId,
-        previousQuantity: currentInventory?.quantity ?? 0,
-        newQuantity: updatedInventory.quantity,
-        version: updatedInventory.version,
-        gapDetected
-      });
-
-      return response;
+      return this.buildSuccessResponse(dto, estoqueAtualizado, gapDetected, estoqueAtual);
     } catch (error) {
-      this.logger.error(`Erro ao processar evento ${dto.eventId}`, {
-        eventId: dto.eventId,
+      this.logger.error(`Erro ao processar evento ${dto.idEvento}`, {
+        idEvento: dto.idEvento,
         error: error.message,
         stack: error.stack
       });
       throw error;
     }
+  }
+
+  private async lancarEventoDuplicado(dto: EstoqueAjustadoEventoDto): Promise<EstoqueAjustadoResponseDto> {
+    this.logger.warn(`Evento ${dto.idEvento} já foi processado anteriormente`);
+
+    this.metricsService.incrementaEventoIgnorado('duplicado');
+    
+    // Buscar inventário atual para retornar status
+    const currentInventory = await this.inventoryRepository.findByStoreAndSku(dto.idLoja, dto.sku);
+
+    return this.buildResponse(false, 'evento_duplicado', currentInventory);
+  }
+
+  private async lancarVersaoDesatualizada(dto: EstoqueAjustadoEventoDto, estoqueAtual: InventarioPorLoja): Promise<EstoqueAjustadoResponseDto> {
+    this.logger.warn(`Versão do evento ${dto.versao} não é válida. Versão atual: ${estoqueAtual.versao}`);
+
+    this.metricsService.incrementaEventoIgnorado('desatualizado');
+    
+    return this.buildResponse(false, 'versao_desatualizada', estoqueAtual);
+  }
+
+  private detectarGap(dto: EstoqueAjustadoEventoDto, estoqueAtual: InventarioPorLoja | null): boolean {
+    if (estoqueAtual && dto.versao > estoqueAtual.versao + 1) {
+      this.logger.warn(`Gap de versão detectado! Versão atual: ${estoqueAtual.versao}, Versão do evento: ${dto.versao}`);
+      this.metricsService.incrementGapDetected();
+      return true;
+    }
+    return false;
+  }
+
+  private buildResponse(aplicado: boolean, status: string, estoque: InventarioPorLoja | null): EstoqueAjustadoResponseDto {
+    const response = new EstoqueAjustadoResponseDto();
+    response.aplicado = aplicado;
+    response.status = status as any;
+    response.versaoAtual = estoque?.versao ?? 0;
+    response.quantidadeAtual = estoque?.quantidade ?? 0;
+    return response;
+  }
+
+  private async processarTransacao(dto: EstoqueAjustadoEventoDto, estoqueAtual: InventarioPorLoja | null): Promise<InventarioPorLoja> {
+    return await this.prisma.$transaction(async (tx) => {
+      // Calcular nova quantidade aplicando o delta
+      const quantidadeAtual = estoqueAtual?.quantidade ?? 0;
+      const quantidadeNova = quantidadeAtual + dto.delta;
+
+      // Aplicar ajuste no inventário diretamente
+      const inventory = await tx.inventarioPorLoja.upsert({
+        where: {
+          idLoja_sku: { idLoja: dto.idLoja, sku: dto.sku }
+        },
+        update: {
+          quantidade: quantidadeNova,
+          versao: dto.versao,
+          atualizadoEm: new Date()
+        },
+        create: {
+          idLoja: dto.idLoja,
+          sku: dto.sku,
+          quantidade: quantidadeNova,
+          versao: dto.versao
+        }
+      });
+
+      // Marcar evento como processado diretamente
+      await tx.eventoProcessado.create({
+        data: { idEvento: dto.idEvento }
+      });
+
+      return inventory;
+    });
+  }
+
+  private buildSuccessResponse(
+    dto: EstoqueAjustadoEventoDto, 
+    updatedInventory: InventarioPorLoja, 
+    gapDetected: boolean,
+    estoqueAtual: InventarioPorLoja | null
+  ): EstoqueAjustadoResponseDto {
+    const response = this.buildResponse(true, gapDetected ? 'gap_detectado' : 'aplicado', updatedInventory);
+
+    this.logger.log(`Evento ${dto.idEvento} processado com sucesso`, {
+      idEvento: dto.idEvento,
+      previousQuantity: estoqueAtual?.quantidade ?? 0,
+      newQuantity: updatedInventory.quantidade,
+      versao: updatedInventory.versao,
+      gapDetected
+    });
+
+    return response;
   }
 }

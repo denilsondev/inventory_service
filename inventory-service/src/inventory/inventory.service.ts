@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InventoryResponseDto } from './dto/inventory-response.dto';
-import { PerStoreInventory } from '@prisma/client';
+import { InventarioPorLoja } from '@prisma/client';
 import { InventoryRepository } from './inventory.repository';
 
 @Injectable()
@@ -21,7 +21,7 @@ export class InventoryService {
     });
 
     try {
-      let inventories: PerStoreInventory[];
+      let inventories: InventarioPorLoja[];
       
       if (storeId) {
         // Consulta específica por loja
@@ -41,7 +41,7 @@ export class InventoryService {
       }
 
       // Calcular total 
-      const totalQuantity = inventories.reduce((sum, inv) => sum + inv.quantity, 0);
+      const totalQuantity = inventories.reduce((sum, inv) => sum + inv.quantidade, 0);
 
       // Preparar resposta
       const response = new InventoryResponseDto();
@@ -49,11 +49,11 @@ export class InventoryService {
       response.totalQuantity = totalQuantity;
       
       if (includeStores) {
-        response.perStore = inventories.map((inv: PerStoreInventory) => ({
-          storeId: inv.storeId,
-          quantity: inv.quantity,
-          version: inv.version,
-          updatedAt: inv.updatedAt
+        response.perStore = inventories.map((inv: InventarioPorLoja) => ({
+          storeId: inv.idLoja,
+          quantity: inv.quantidade,
+          version: inv.versao,
+          updatedAt: inv.atualizadoEm
         }));
       }
 
