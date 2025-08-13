@@ -1,78 +1,108 @@
 # Prompts Utilizados
 
-## Desenvolvimento Inicial
+## Planejamento Inicial
 
-### Arquitetura e Design
+### 1. Definição do Problema
 ```
-Analise esta solução completa de sistema de inventário distribuído. 
-Inclua README, código, testes e documentação. 
-Foque em consistência, latência baixa, observabilidade e simulação de persistência.
+Me ajude a definir um planejamento para construir uma aplicação que resolva [DESCREVA O PROBLEMA]. 
+Preciso entender:
+- Qual é o problema específico?
+- Quais são os requisitos principais?
+- Que tecnologias seriam adequadas?
+- Como estruturar a arquitetura?
 ```
 
-### Refatoração e Melhorias
+### 2. Planejamento do Projeto
+```
+Me ajude a criar um planejamento detalhado para desenvolver [NOME DO PROJETO].
+Inclua:
+- Arquitetura proposta
+- Stack tecnológico
+- Estrutura de pastas
+- Cronograma de desenvolvimento
+- Pontos de atenção
+```
+
+## Desenvolvimento Guiado
+
+### 3. Implementação de Etapas
+```
+Me ajude a implementar [ETAPA ESPECÍFICA] do projeto.
+IMPORTANTE: Não saia escrevendo código, apenas:
+- Me oriente sobre os conceitos envolvidos
+- Explique as decisões arquiteturais
+- Sugira abordagens
+- Me ajude a entender o "porquê" antes do "como"
+```
+
+### 4. Testes Unitários
+```
+Me ajude a implementar testes unitários para [COMPONENTE/FUNCIONALIDADE].
+Inclua:
+- Quais cenários testar
+- Como estruturar os testes
+- Mocks necessários
+- Boas práticas
+- Exemplos de casos de teste
+```
+
+## Documentação e Análise
+
+### 5. Documentação Completa
+```
+Crie documentação completa do projeto [NOME DO PROJETO].
+Inclua:
+- README principal
+- Documentação da API
+- Diagramas de arquitetura
+- Guias de instalação e execução
+- Exemplos de uso
+```
+
+### 6. Análise e Melhorias
+```
+Analise a aplicação [NOME DO PROJETO] completa e me dê pontos de melhoria.
+IMPORTANTE: Não saia escrevendo código, apenas:
+- Identifique problemas de arquitetura
+- Sugira melhorias de performance
+- Aponte questões de segurança
+- Recomende boas práticas
+- Alerte sobre possíveis bugs
+```
+
+## Prompts Específicos para Este Projeto
+
+### Arquitetura Distribuída
+```
+Analise esta solução de sistema de inventário distribuído.
+Foque em:
+- Consistência vs disponibilidade
+- Controle de versão
+- Idempotência
+- Observabilidade
+- Simulação de persistência
+```
+
+### Refatoração
 ```
 Traduza todos os nomes para português: tabelas, colunas, classes, métodos, DTOs, rotas.
 Mantenha consistência em todo o código.
 ```
 
-## Otimizações Específicas
-
-### Simplificação do Simulador
+### Simplificação
 ```
-Simplifique o simulador.js removendo complexidade desnecessária.
-Mantenha apenas o essencial: geração de eventos, envio para API, logs claros.
+Simplifique [COMPONENTE] removendo complexidade desnecessária.
+Mantenha apenas o essencial e foco na clareza.
 ```
 
-### Configuração do Docker
+### Docker
 ```
-Crie um Dockerfile simples e funcional para esta aplicação NestJS.
+Crie um Dockerfile simples e funcional para esta aplicação [TECNOLOGIA].
 Não use docker-compose, apenas o Dockerfile básico.
-```
-
-### Documentação
-```
-Simplifique o README.md para ser conciso e claro.
-Foque no essencial: como executar, endpoints principais, exemplos práticos.
-```
-
-## Testes e Qualidade
-
-### Correção de Testes
-```
-Corrija os testes E2E para testar endpoints reais da aplicação.
-Remova referências ao AppController que foi deletado.
-```
-
-### Validação de Negócio
-```
-Implemente validação para evitar estoque negativo.
-Adicione métricas para eventos rejeitados por estoque negativo.
-```
-
-## Estratégias Técnicas
-
-### Controle de Versão
-```
-Explique a lógica de versionamento: dto.versao <= estoqueAtual.versao vs dto.versao > estoqueAtual.versao + 1
-Discuta implicações de gaps de versão.
 ```
 
 ### Observabilidade
 ```
-Implemente métricas Prometheus para eventos aplicados, ignorados e gaps detectados.
+Implemente métricas [PROMETHEUS/OUTRO] para [MÉTRICAS ESPECÍFICAS].
 Adicione health check e logs estruturados.
-```
-
-## Ferramentas e Produtividade
-
-### Uso do Prisma
-```
-Configure Prisma com SQLite para simulação de persistência.
-Crie migrations e explique o schema do banco.
-```
-
-### Swagger e Documentação
-```
-Configure Swagger para documentação da API.
-Simplifique as anotações mantendo exemplos úteis.
 ``` 

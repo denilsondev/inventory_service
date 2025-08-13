@@ -10,7 +10,7 @@ export class EventosController {
   constructor(private readonly service: EventosService) {}
 
   @Post('estoque-ajustado')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Receber evento de ajuste de estoque',
     description: 'Processa eventos de ajuste de estoque com controle de idempotência e versão'
   })

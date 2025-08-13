@@ -91,9 +91,6 @@ docker logs inventory-container
 ```bash
 # Testes unitários
 npm test
-
-# Testes E2E
-npm run test:e2e
 ```
 
 ### Endpoints
