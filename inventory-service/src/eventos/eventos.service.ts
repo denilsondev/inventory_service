@@ -4,7 +4,7 @@ import { EstoqueAjustadoResponseDto } from './dto/estoque-ajustado-response.dto'
 import { InventarioPorLoja } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
-import { InventoryRepository } from 'src/inventory/inventory.repository';
+import { EstoqueRepository } from 'src/inventory/estoque-repository';
 import { EventRepository } from './repository/event.repository';
 import { MetricsService } from 'src/metrics/metrics.service';
 
@@ -13,7 +13,7 @@ export class EventosService {
   private readonly logger = new Logger(EventosService.name);
 
   constructor(
-    private readonly inventoryRepository: InventoryRepository,
+    private readonly estoqueRepository: EstoqueRepository,
     private readonly eventRepository: EventRepository,
     private readonly prisma: PrismaService,
     private readonly metricsService: MetricsService
@@ -29,7 +29,7 @@ export class EventosService {
       }
 
       // Verificar se versão do evento é válida
-      const estoqueAtual = await this.inventoryRepository.findByStoreAndSku(dto.idLoja, dto.sku);
+      const estoqueAtual = await this.estoqueRepository.obterPorLojaESku(dto.idLoja, dto.sku);
       
       if (estoqueAtual && dto.versao <= estoqueAtual.versao) {
         return this.lancarVersaoDesatualizada(dto, estoqueAtual);
@@ -60,7 +60,7 @@ export class EventosService {
     this.metricsService.incrementaEventoIgnorado('duplicado');
     
     // Buscar inventário atual para retornar status
-    const currentInventory = await this.inventoryRepository.findByStoreAndSku(dto.idLoja, dto.sku);
+    const currentInventory = await this.estoqueRepository.obterPorLojaESku(dto.idLoja, dto.sku);
 
     return this.buildResponse(false, 'evento_duplicado', currentInventory);
   }

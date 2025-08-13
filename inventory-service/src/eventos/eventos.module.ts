@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { EventosController } from './eventos.controller';
 import { EventosService } from './eventos.service';
 import { PrismaModule } from '../prisma/prisma.module';
-import { InventoryModule } from '../inventory/inventory.module';
+import { InventoryModule } from '../inventory/estoque.module';
 import { MetricsModule } from '../metrics/metrics.module';
 import { EventRepository } from './repository/event.repository';
 

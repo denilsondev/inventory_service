@@ -5,7 +5,7 @@ import { EstoqueAjustadoEventoDto } from './dto/estoque-ajustado.dto';
 import { EstoqueAjustadoResponseDto } from './dto/estoque-ajustado-response.dto';
 
 @ApiTags('eventos')
-@Controller('v1/events')
+@Controller('v1/eventos')
 export class EventosController {
   constructor(private readonly service: EventosService) {}
 

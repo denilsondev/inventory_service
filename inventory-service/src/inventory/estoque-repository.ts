@@ -3,10 +3,10 @@ import { InventarioPorLoja, PrismaClient } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 
 @Injectable()
-export class InventoryRepository {
+export class EstoqueRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findByStoreAndSku(idLoja: string, sku: string): Promise<InventarioPorLoja | null> {
+  async obterPorLojaESku(idLoja: string, sku: string): Promise<InventarioPorLoja | null> {
     return this.prisma.inventarioPorLoja.findUnique({
       where: {
         idLoja_sku: { idLoja, sku }
@@ -14,7 +14,7 @@ export class InventoryRepository {
     });
   }
 
-    async findBySku(sku: string): Promise<InventarioPorLoja[]> {
+    async obterPorSku(sku: string): Promise<InventarioPorLoja[]> {
     return this.prisma.inventarioPorLoja.findMany({
       where: { sku },
       orderBy: { idLoja: 'asc' }
@@ -23,7 +23,7 @@ export class InventoryRepository {
 
 
 
-  async upsertInventory(data: {
+  async atualizarEstoque(data: {
     idLoja: string;
     sku: string;
     quantidade: number;
