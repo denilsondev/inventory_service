@@ -28,13 +28,25 @@ function initializeVersions() {
 }
 
 // Gerar evento
-function generateEvent(loja, sku) {
+function generateEvent(loja, sku, eventNumber) {
   const key = `${loja}:${sku}`;
   const versao = versionState.get(key);
   versionState.set(key, versao + 1);
   
-  const isVenda = Math.random() < 0.8;
-  const delta = isVenda ? -1 : 3;
+  // Primeiros eventos são reposições para criar estoque
+  let delta;
+  let tipo;
+  
+  if (eventNumber < 8) {
+    // Primeiros 8 eventos: reposições para criar estoque
+    delta = 10;
+    tipo = 'reposição';
+  } else {
+    // Depois: 80% vendas, 20% reposições
+    const isVenda = Math.random() < 0.8;
+    delta = isVenda ? -1 : 5;
+    tipo = isVenda ? 'venda' : 'reposição';
+  }
   
   return {
     idEvento: `evt_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
@@ -82,7 +94,7 @@ function sendEvent(event) {
 }
 
 // Processar evento
-async function processEvent() {
+async function processEvent(eventNumber) {
   try {
     const lojas = ['loja_001', 'loja_002'];
     const produtos = ['PROD_A', 'PROD_B'];
@@ -90,21 +102,27 @@ async function processEvent() {
     const loja = lojas[Math.floor(Math.random() * lojas.length)];
     const sku = produtos[Math.floor(Math.random() * produtos.length)];
     
-    const event = generateEvent(loja, sku);
+    const event = generateEvent(loja, sku, eventNumber);
     const tipo = event.delta > 0 ? 'reposição' : 'venda';
     
     console.log(`📤 ${tipo}: ${event.sku} (${event.delta}) - v${event.versao}`);
     
     const response = await sendEvent(event);
     
-    if (response.status === 202 || response.status === 200) {
-      if (response.data.aplicado) {
+    if (response.status === 201 || response.status === 200) {
+      if (response.data && response.data.aplicado) {
         console.log(`✅ Aplicado: ${response.data.status}`);
         counters.applied++;
-      } else {
+      } else if (response.data && !response.data.aplicado) {
         console.log(`⚠️  Ignorado: ${response.data.status}`);
         counters.ignored++;
+      } else {
+        console.log(`✅ Evento processado (status: ${response.status})`);
+        counters.applied++;
       }
+    } else if (response.status === 400) {
+      console.log(`⚠️  Rejeitado: ${response.data?.message || 'Bad Request'}`);
+      counters.ignored++;
     } else {
       console.log(`❌ Erro: ${response.status}`);
       counters.errors++;
@@ -133,7 +151,7 @@ async function runSimulation() {
       return;
     }
     
-    await processEvent();
+    await processEvent(current);
     current++;
     
     if (current % 5 === 0) {

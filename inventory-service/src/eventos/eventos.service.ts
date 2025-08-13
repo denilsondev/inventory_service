@@ -4,8 +4,8 @@ import { EstoqueAjustadoResponseDto } from './dto/estoque-ajustado-response.dto'
 import { EstoquePorLoja } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventRepository } from './event.repository';
-import { MetricasService } from 'src/metrics/metricas.service';
-import { EstoqueRepository } from 'src/estoque/estoque.repository';
+import { MetricasService } from '../metrics/metricas.service';
+import { EstoqueRepository } from '../estoque/estoque.repository';
 
 
 @Injectable()
@@ -28,17 +28,22 @@ export class EventosService {
         return this.lancarEventoDuplicado(dto);
       }
 
-      // Verificar se versão do evento é válida
       const estoqueAtual = await this.estoqueRepository.obterPorLojaESku(dto.idLoja, dto.sku);
+      
+      // Validar estoque negativo ANTES da verificação de versão
+      if (estoqueAtual) {
+        const quantidadeNova = estoqueAtual.quantidade + dto.delta;
+        if (quantidadeNova < 0) {
+          throw new BadRequestException(`Estoque não pode ficar negativo. Quantidade atual: ${estoqueAtual.quantidade}, Delta: ${dto.delta}, Resultado: ${quantidadeNova}`);
+        }
+      }
       
       if (estoqueAtual && dto.versao <= estoqueAtual.versao) {
         return this.lancarVersaoDesatualizada(dto, estoqueAtual);
       }
 
-      // Detectar gap de versão (pulo de versão)
       const gapDetected = this.detectarGap(dto, estoqueAtual);
 
-      // Executar operações em transação para garantir atomicidade
       const estoqueAtualizado = await this.processarTransacao(dto, estoqueAtual);
 
       this.metricasService.incrementaEventosAplicados();
