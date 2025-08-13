@@ -39,7 +39,7 @@ export class MetricasService {
   }
 
 
-  incrementaEventosIgnorados(reason: 'duplicado' | 'desatualizado'): void {
+  incrementaEventosIgnorados(reason: 'duplicado' | 'desatualizado' | 'estoque_negativo'): void {
     this.eventosIgnoradosTotal.inc({ reason });
   }
 

@@ -19,8 +19,8 @@ export class EventosService {
     private readonly metricasService: MetricasService
   ) {}
 
-  async receberAjusteEstoque(dto: EstoqueAjustadoEventoDto): Promise<EstoqueAjustadoResponseDto> {
-    this.logger.log(`Recebendo evento de ajuste de estoque: ${dto.idEvento}`, dto);
+               async receberAjusteEstoque(dto: EstoqueAjustadoEventoDto): Promise<EstoqueAjustadoResponseDto> {
+               this.logger.log(`${dto.idLoja}: ${dto.delta > 0 ? 'reposição' : 'venda'} ${dto.sku} (${dto.delta > 0 ? '+' : ''}${dto.delta}) v${dto.versao}`);
 
     try {
       const eventoExistente = await this.eventRepository.findByEventId(dto.idEvento);
@@ -34,6 +34,7 @@ export class EventosService {
       if (estoqueAtual) {
         const quantidadeNova = estoqueAtual.quantidade + dto.delta;
         if (quantidadeNova < 0) {
+          this.metricasService.incrementaEventosIgnorados('estoque_negativo');
           throw new BadRequestException(`Estoque não pode ficar negativo. Quantidade atual: ${estoqueAtual.quantidade}, Delta: ${dto.delta}, Resultado: ${quantidadeNova}`);
         }
       }
@@ -60,7 +61,7 @@ export class EventosService {
   }
 
   private async lancarEventoDuplicado(dto: EstoqueAjustadoEventoDto): Promise<EstoqueAjustadoResponseDto> {
-    this.logger.warn(`Evento ${dto.idEvento} já foi processado anteriormente`);
+                   this.logger.warn(`DUPLICADO: ${dto.idEvento} já foi processado anteriormente`);
 
     this.metricasService.incrementaEventosIgnorados('duplicado');
     
@@ -71,7 +72,7 @@ export class EventosService {
   }
 
   private async lancarVersaoDesatualizada(dto: EstoqueAjustadoEventoDto, estoqueAtual: EstoquePorLoja): Promise<EstoqueAjustadoResponseDto> {
-    this.logger.warn(`Versão do evento ${dto.versao} não é válida. Versão atual: ${estoqueAtual.versao}`);
+                   this.logger.warn(`DESATUALIZADO: Versão ${dto.versao} não é válida. Versão atual: ${estoqueAtual.versao}`);
 
     this.metricasService.incrementaEventosIgnorados('desatualizado');
     
@@ -80,7 +81,7 @@ export class EventosService {
 
   private detectarGap(dto: EstoqueAjustadoEventoDto, estoqueAtual: EstoquePorLoja | null): boolean {
     if (estoqueAtual && dto.versao > estoqueAtual.versao + 1) {
-      this.logger.warn(`Gap de versão detectado! Versão atual: ${estoqueAtual.versao}, Versão do evento: ${dto.versao}`);
+                       this.logger.warn(`GAP: Versão atual: ${estoqueAtual.versao}, Versão do evento: ${dto.versao}`);
       this.metricasService.incrementaGapsDetectados();
       return true;
     }
@@ -104,6 +105,7 @@ export class EventosService {
 
       // Validar se o estoque não ficará negativo
       if (quantidadeNova < 0) {
+        // Não podemos acessar metricasService aqui, mas a validação já foi feita antes
         throw new BadRequestException(`Estoque não pode ficar negativo. Quantidade atual: ${quantidadeAtual}, Delta: ${dto.delta}, Resultado: ${quantidadeNova}`);
       }
 
@@ -137,18 +139,12 @@ export class EventosService {
   private buildSuccessResponse(
     dto: EstoqueAjustadoEventoDto, 
     estoqueAtualizado: EstoquePorLoja, 
-    gapDetected: boolean,
+    gapDetectado: boolean,
     estoqueAtual: EstoquePorLoja | null
   ): EstoqueAjustadoResponseDto {
-    const response = this.buildResponse(true, gapDetected ? 'gap_detectado' : 'aplicado', estoqueAtualizado);
+    const response = this.buildResponse(true, gapDetectado ? 'gap_detectado' : 'aplicado', estoqueAtualizado);
 
-    this.logger.log(`Evento ${dto.idEvento} processado com sucesso`, {
-      idEvento: dto.idEvento,
-      previousQuantity: estoqueAtual?.quantidade ?? 0,
-      newQuantity: estoqueAtualizado.quantidade,
-      versao: estoqueAtualizado.versao,
-      gapDetected
-    });
+                   this.logger.log(`APLICADO: ${dto.idLoja}: ${dto.sku} ${estoqueAtual?.quantidade ?? 0}→${estoqueAtualizado.quantidade} v${estoqueAtualizado.versao}${gapDetectado ? ' (gap)' : ''}`);
 
     return response;
   }
