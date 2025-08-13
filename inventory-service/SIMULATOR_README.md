@@ -1,152 +1,66 @@
-# 🚀 Simulador de Eventos de Estoque
+# Simulador de Eventos de Estoque
 
-## 📋 Descrição
+Simulador simples para testar o sistema de inventário.
 
-Simulador simples para testar o sistema de inventário, gerando eventos de ajuste de estoque de forma realista.
+## Como usar
 
-## 🎯 Como usar
+### Pré-requisitos
+- Aplicação rodando em `http://localhost:3000`
+- Banco de dados configurado
 
-### 1. **Pré-requisitos**
-- ✅ Aplicação rodando em `http://localhost:3000`
-- ✅ Banco de dados configurado e migrado
-
-### 2. **Executar simulação**
+### Executar
 ```bash
-npm run simulate
+node simulator.js
 ```
 
-### 3. **Estratégia de eventos**
-O simulador segue uma estratégia inteligente:
+## Configuração
 
-#### **🔄 Primeiros 8 eventos:**
-- **100% reposições** (+10 unidades)
-- **Objetivo:** Criar estoque inicial para permitir vendas
+```javascript
+const TOTAL_EVENTOS = 100;
+const INTERVALO = 1000; // 1 segundo
+const LOJAS = ['loja_001', 'loja_002'];
+const PRODUTOS = ['PROD_A', 'PROD_B'];
+```
 
-#### **🛒 Eventos subsequentes:**
-- **80% vendas** (-1 unidade)
-- **20% reposições** (+5 unidades)
-- **Objetivo:** Simular fluxo real de negócio
+## Estratégia
 
-### 4. **Controle de versões**
-- ✅ **Versões sequenciais** por `(idLoja, sku)`
-- ✅ **Prevenção de conflitos** de versão
-- ✅ **Simulação de gaps** ocasionais
+- **70% vendas** (delta = -1)
+- **30% reposições** (delta = +5)
+- **10% chance de gap** de versão
+- **Versões sequenciais** por `(loja, produto)`
 
-### 5. **Exemplo de saída**
+## Exemplo de saída
+
 ```
 🚀 Simulador iniciado
 
-🔄 Inicializando versões...
+🔄 Inicializando...
   loja_001:PROD_A -> v1
   loja_001:PROD_B -> v1
   loja_002:PROD_A -> v1
   loja_002:PROD_B -> v1
-✅ Versões inicializadas
+✅ Pronto!
 
-📤 reposição: PROD_A (10) - v2
-✅ Aplicado: aplicado
-📤 reposição: PROD_B (10) - v2
-⚠️  Ignorado: versao_desatualizada
-📤 venda: PROD_A (-1) - v3
-✅ Aplicado: aplicado
+📤 loja_001: reposição PROD_A (+5) - v1
+APLICADO
+📤 loja_002: venda PROD_B (-1) - v1
+APLICADO
+📤 loja_001: venda PROD_A (-1) - v2
+APLICADO
 
-📊 RESUMO
-==========
-Total: 20
-Aplicados: 10
-Ignorados: 10
-Erros: 0
+📊 5/100
 
 ✅ Simulação concluída!
 ```
 
-### 6. **Cenários testados**
-O simulador testa automaticamente:
+## Cenários testados
 
-#### **✅ Cenários de sucesso:**
-- **Reposições iniciais** criando estoque
-- **Vendas com estoque** disponível
-- **Gaps de versão** detectados e processados
+- ✅ **Aplicados**: Eventos válidos
+- ⚠️ **Ignorados**: Duplicados, versões desatualizadas
+- ❌ **Rejeitados**: Estoque negativo
+- 🔍 **Gaps**: Versões puladas (detectados)
 
-#### **⚠️ Cenários de rejeição:**
-- **Versões desatualizadas** (idempotência)
-- **Estoque negativo** (validação de negócio)
-- **Eventos duplicados** (controle de idempotência)
+## Troubleshooting
 
-### 7. **Configuração**
-O simulador usa configuração hardcoded simples:
-
-```javascript
-const CONFIG = {
-  BASE_URL: 'http://localhost:3000',
-  ENDPOINT: '/v1/eventos/estoque-ajustado',
-  TOTAL_EVENTOS: 20,
-  INTERVALO_EVENTOS: 1000,  // 1 segundo
-  PORTA: 3000
-};
-```
-
-### 8. **Troubleshooting**
-
-#### **❌ "connect ECONNREFUSED 127.0.0.1:3000"**
-- **Solução:** Inicie a aplicação primeiro com `npm run start:dev`
-
-#### **⚠️ Muitos eventos ignorados**
-- **Normal:** Sistema está funcionando corretamente
-- **Versões desatualizadas** são rejeitadas (idempotência)
-- **Estoque negativo** é rejeitado (validação)
-
-#### **📊 Métricas**
-Verifique as métricas da aplicação:
-```bash
-curl http://localhost:3000/metrics
-```
-
-### 9. **Parar simulação**
-- **Automático:** Para após `TOTAL_EVENTOS` eventos
-- **Manual:** Use `Ctrl+C` para interromper
-
-## 🏗️ Arquitetura
-
-### **📁 Estrutura do código:**
-```
-simulator.js
-├── CONFIGURAÇÃO
-├── CONSTANTES DE NEGÓCIO
-├── ESTADO GLOBAL
-├── FUNÇÕES AUXILIARES
-│   ├── inicializarVersoes()
-│   ├── gerarEvento()
-│   ├── determinarTipoEvento()
-│   ├── enviarEvento()
-│   └── interpretarResposta()
-├── FUNÇÕES PRINCIPAIS
-│   ├── processarEvento()
-│   ├── executarSimulacao()
-│   └── exibirResumo()
-└── EXECUÇÃO
-```
-
-### **🎯 Responsabilidades:**
-- **Geração de eventos** realistas
-- **Controle de versões** sequenciais
-- **Tratamento de respostas** da API
-- **Exibição de estatísticas** claras
-
-## 📈 Melhorias implementadas
-
-### **✅ Código limpo:**
-- **Nomenclatura em português** consistente
-- **Constantes extraídas** e documentadas
-- **Funções com responsabilidade única**
-- **Documentação JSDoc** completa
-
-### **✅ Estratégia inteligente:**
-- **Reposições iniciais** para criar estoque
-- **Fluxo realista** de vendas e reposições
-- **Prevenção de estoque negativo**
-
-### **✅ Tratamento robusto:**
-- **Diferentes tipos** de resposta da API
-- **Contadores separados** para estatísticas
-- **Tratamento de erros** adequado 
+**Erro de conexão**: Verifique se a API está rodando
+**Muitos ignorados**: Normal - sistema funcionando corretamente 

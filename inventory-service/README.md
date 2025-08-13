@@ -1,104 +1,145 @@
-## Inventory Challenge — Plano e Registro
+# Sistema de Inventário Distribuído
 
-### Enunciado (resumo)
-Este desafio pede um protótipo de melhoria para um sistema de inventário distribuído (lojas com BD local e um serviço central), priorizando:
-- Consistência entre lojas e central (idempotência e ordenação de eventos)
-- Baixa latência de escrita/leitura percebida
-- Observabilidade mínima (health, métricas, logs)
-- Persistência simulada (JSON/CSV/SQLite) e API documentada
-- Entregáveis: README, diagrama e instruções de execução (run.md)
+Sistema centralizado para gestão de inventário com controle de versão e idempotência.
 
-Observação: cole abaixo o enunciado completo (texto oficial) quando quiser para mantermos o histórico:
+## 🏗️ Arquitetura
 
-> Cole aqui o enunciado completo...
+- **API Central**: NestJS com SQLite
+- **Simulador**: Node.js CLI para gerar eventos
+- **Observabilidade**: Health check, métricas Prometheus, logs
 
----
+## 📡 Endpoints
 
-### Decisões de arquitetura (MVP)
-- Topologia: Serviço Central (API) + Simulador de Lojas (CLI)
-- Transporte: HTTP com retries no cliente (at-least-once) + idempotência no servidor
-- Consistência: idempotência por `eventId` e ordenação lógica por `version` por `(storeId, sku)`
-- Persistência: SQLite com duas tabelas principais
-- Observabilidade: `GET /health`, `GET /metrics` (Prometheus), logs JSON
-- Evolução futura: fila/mensageria como bônus (mantemos o código pronto para isso)
+### Eventos de Estoque
+```
+POST /v1/eventos/estoque-ajustado
+Body: { idEvento, idLoja, sku, delta, versao, dataAtualizacao? }
+```
 
-### Endpoints do Serviço Central (MVP)
-- POST `/v1/events/stock-adjusted`
-  - Body: `{ eventId, storeId, sku, delta, version, occurredAt? }`
-  - Regras:
-    - Ignorar duplicados por `eventId` (idempotência via `seen_events`)
-    - Aplicar apenas se `version` for maior que a atual por `(storeId, sku)`
-    - Se houver pulo de versão (gap), aplicar e contar métrica
-  - Respostas:
-    - 202 `{ applied: true, status: "applied", currentVersion, currentQuantity }`
-    - 200 `{ applied: false, status: "duplicate_event"|"stale_version"|"gap_detected", currentVersion, currentQuantity }`
-
-- GET `/v1/inventory/{sku}`
-  - Query: `storeId?`, `includeStores?=true`
-  - Resposta: `{ sku, totalQuantity, perStore: [{ storeId, quantity, version, updatedAt }] }`
-
-- Infra:
-  - GET `/health` → estado do serviço (e DB quando implementado)
-  - GET `/metrics` → contadores em formato Prometheus
-
-### Modelo de dados (SQLite)
-- `per_store_inventory(
-    store_id TEXT,
-    sku TEXT,
-    quantity INTEGER,
-    version INTEGER,
-    updated_at TEXT,
-    PRIMARY KEY(store_id, sku)
-  )`
-- `seen_events(
-    event_id TEXT PRIMARY KEY
-  )`
-- Índice extra: `CREATE INDEX IF NOT EXISTS idx_inventory_sku ON per_store_inventory(sku);`
-
-### Fluxo de eventos (HTTP)
-1) Simulador envia `POST /v1/events/stock-adjusted` com `{eventId, storeId, sku, delta, version}`
-2) Servidor verifica duplicado em `seen_events` (INSERT OR IGNORE)
-3) Aplica `UPSERT` condicional por versão (só atualiza se `version` nova for maior)
-4) Responde com status/versão/quantidade atual; contabiliza métricas
+### Consulta de Estoque
+```
+GET /v1/estoque/{sku}?idLoja={loja}&lojasInclusas=true
+```
 
 ### Observabilidade
-- Logs JSON com `x-correlation-id`, `eventId`, `storeId`, `sku`
-- Métricas:
-  - `events_applied_total`
-  - `events_ignored_total{reason="duplicate"|"stale"}`
-  - `gap_detected_total`
-- Health: verifica serviço e acesso ao SQLite
+```
+GET /health
+GET /metrics
+```
 
-### Plano por fases (checklist)
-1) Scaffold do serviço (`inventory-service`) com NestJS + Express e `GET /health` [feito]
-2) Configurar SQLite (better-sqlite3), `schema.sql`, provider de DB
-3) Implementar `POST /v1/events/stock-adjusted` com idempotência e versão
-4) Implementar `GET /v1/inventory/{sku}` (total e por loja)
-5) Observabilidade: `/metrics` (Prometheus) e logs JSON; health checando DB
-6) Simulador de Lojas (CLI): gera eventos (80% vendas -1, 20% reposição +5), versões por `(storeId, sku)`, retries e duplicação ocasional
-7) Testes (Vitest): duplicado, versão velha, gap, consulta
-8) Documentos: `run.md`, diagrama (Mermaid), `prompts.md`
+## 🗄️ Banco de Dados
 
-### Critérios de aceite
-- Eventos novos aplicados; duplicados/versões antigas ignorados
-- Gap detectado e metricado
-- Consulta por SKU retorna totais e por loja
-- `/health` e `/metrics` disponíveis
-- Simulador gera 100+ eventos por loja e o estado central fica consistente
-- Testes do MVP passam
+### Tabelas
+- `InventarioPorLoja(idLoja, sku, quantidade, versao, atualizadoEm)`
+- `EventoProcessado(idEvento)`
 
-### Bônus (se sobrar tempo)
-- Bulk: `POST /v1/events/stock-adjusted/bulk` (207 Multi-Status)
-- Docker: `Dockerfile` + `docker-compose.yml`
-- Reservas (no-oversell): endpoints para criar/confirmar/cancelar reservas, TTL e expiração
-- Mensageria: RabbitMQ (publisher no simulador, consumer no serviço), partição por `storeId`
-- Tracing básico (OpenTelemetry) opcional
+### Regras
+- **Idempotência**: Eventos duplicados são ignorados
+- **Versão**: Só aplica se `versao > versao_atual`
+- **Gap**: Detecta e aplica eventos com versão pulada
 
-### Como rodar (dev)
-- Serviço: `cd inventory-service && npm install && npm run start:dev`
-- Porta: 8080 (`GET http://localhost:8080/health`)
-- Observação: nomes de classes/métodos em português para alinhamento do código
+## 🎮 Simulador
 
-### Histórico (modo passo-a-passo)
-- 1) Criado serviço NestJS `inventory-service` e rota `/health` (porta 8080)
-- Próximo: fase 2 (SQLite) — após aprovação 
+```bash
+node simulator.js
+```
+
+**Gera 100 eventos:**
+- 70% vendas (delta = -1, diminui estoque)
+- 30% reposições (delta = +5, aumenta estoque)
+- 10% chance de gap de versão
+- Versões sequenciais por `(loja, produto)`
+
+## 🚀 Como Executar
+
+### Pré-requisitos
+- Node.js 18+
+- npm ou yarn
+- Docker (opcional)
+
+### Instalação
+```bash
+# Instalar dependências
+npm install
+
+# Configurar banco de dados
+npx prisma migrate dev
+```
+
+### Desenvolvimento Local
+```bash
+# Rodar API
+npm run start:dev
+
+# Em outro terminal, rodar simulador
+node simulator.js
+```
+
+### Docker
+```bash
+# Build da imagem
+docker build -t inventory-api .
+
+# Rodar container
+docker run -d -p 3001:3000 --name inventory-container inventory-api
+
+# Verificar logs
+docker logs inventory-container
+```
+
+### Testes
+```bash
+# Testes unitários
+npm test
+
+# Testes E2E
+npm run test:e2e
+```
+
+### Endpoints
+- **API**: http://localhost:3000
+- **Swagger**: http://localhost:3000/api
+- **Health**: http://localhost:3000/health
+- **Métricas**: http://localhost:3000/metrics
+
+### Limpeza
+```bash
+# Parar container
+docker stop inventory-container
+docker rm inventory-container
+
+# Limpar banco
+rm prisma/dev.db
+npx prisma migrate dev
+```
+
+## 📊 Métricas
+
+- `eventos_aplicados_total`
+- `eventos_ignorados_total{reason="duplicado"|"desatualizado"|"estoque_negativo"}`
+- `gaps_detectados_total`
+
+## 📝 Exemplos
+
+### Enviar evento
+```bash
+curl -X POST http://localhost:3000/v1/eventos/estoque-ajustado \
+  -H "Content-Type: application/json" \
+  -d '{
+    "idEvento": "evt_123",
+    "idLoja": "loja_001", 
+    "sku": "PROD_A",
+    "delta": -1,
+    "versao": 1
+  }'
+```
+
+### Consultar estoque
+```bash
+curl "http://localhost:3000/v1/estoque/PROD_A?lojasInclusas=true"
+```
+
+### Ver métricas
+```bash
+curl http://localhost:3000/metrics
+``` 
