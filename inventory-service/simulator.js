@@ -2,176 +2,261 @@
 
 const http = require('http');
 
-// Configuração simples
-const config = {
-  baseUrl: 'http://localhost:3000',
-  endpoint: '/v1/eventos/estoque-ajustado',
-  totalEvents: 20,
-  eventInterval: 1000
+// ============================================================================
+// CONFIGURAÇÃO
+// ============================================================================
+const CONFIG = {
+  BASE_URL: 'http://localhost:3000',
+  ENDPOINT: '/v1/eventos/estoque-ajustado',
+  TOTAL_EVENTOS: 20,
+  INTERVALO_EVENTOS: 1000,
+  PORTA: 3000
 };
 
-// Estado de versões
-const versionState = new Map();
-const counters = { total: 0, applied: 0, ignored: 0, errors: 0 };
+// ============================================================================
+// CONSTANTES DE NEGÓCIO
+// ============================================================================
+const ESTRATEGIA_EVENTOS = {
+  REPOSICOES_INICIAIS: 8,        // Primeiros 8 eventos são reposições
+  DELTA_REPOSICAO_INICIAL: 10,   // Quantidade para criar estoque
+  DELTA_REPOSICAO_NORMAL: 5,     // Quantidade para reposições normais
+  DELTA_VENDA: -1,               // Quantidade para vendas
+  PROBABILIDADE_VENDA: 0.8       // 80% de chance de ser venda
+};
 
-// Inicializar versões
-function initializeVersions() {
+const LOJAS = ['loja_001', 'loja_002'];
+const PRODUTOS = ['PROD_A', 'PROD_B'];
+
+// ============================================================================
+// ESTADO GLOBAL
+// ============================================================================
+const estadoVersoes = new Map();
+const contadores = { 
+  total: 0, 
+  aplicados: 0, 
+  ignorados: 0, 
+  erros: 0 
+};
+
+// ============================================================================
+// FUNÇÕES AUXILIARES
+// ============================================================================
+
+/**
+ * Inicializa as versões de todos os produtos em todas as lojas
+ */
+function inicializarVersoes() {
   console.log('🔄 Inicializando versões...');
-  ['loja_001', 'loja_002'].forEach(loja => {
-    ['PROD_A', 'PROD_B'].forEach(sku => {
-      const key = `${loja}:${sku}`;
-      versionState.set(key, 1);
-      console.log(`  ${key} -> v1`);
+  
+  LOJAS.forEach(loja => {
+    PRODUTOS.forEach(sku => {
+      const chave = `${loja}:${sku}`;
+      estadoVersoes.set(chave, 1);
+      console.log(`  ${chave} -> v1`);
     });
   });
+  
   console.log('✅ Versões inicializadas\n');
 }
 
-// Gerar evento
-function generateEvent(loja, sku, eventNumber) {
-  const key = `${loja}:${sku}`;
-  const versao = versionState.get(key);
-  versionState.set(key, versao + 1);
+/**
+ * Gera um evento baseado na estratégia de negócio
+ * @param {string} loja - ID da loja
+ * @param {string} sku - SKU do produto
+ * @param {number} numeroEvento - Número sequencial do evento
+ * @returns {Object} Evento gerado
+ */
+function gerarEvento(loja, sku, numeroEvento) {
+  const chave = `${loja}:${sku}`;
+  const versaoAtual = estadoVersoes.get(chave);
+  const novaVersao = versaoAtual + 1;
   
-  // Primeiros eventos são reposições para criar estoque
-  let delta;
-  let tipo;
+  // Atualiza a versão para o próximo evento
+  estadoVersoes.set(chave, novaVersao);
   
-  if (eventNumber < 8) {
-    // Primeiros 8 eventos: reposições para criar estoque
-    delta = 10;
-    tipo = 'reposição';
-  } else {
-    // Depois: 80% vendas, 20% reposições
-    const isVenda = Math.random() < 0.8;
-    delta = isVenda ? -1 : 5;
-    tipo = isVenda ? 'venda' : 'reposição';
-  }
+  // Define o tipo e delta baseado na estratégia
+  const { delta, tipo } = determinarTipoEvento(numeroEvento);
   
   return {
     idEvento: `evt_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
     idLoja: loja,
     sku: sku,
     delta: delta,
-    versao: versao + 1,
+    versao: novaVersao,
     dataAtualizacao: new Date().toISOString()
   };
 }
 
-// Enviar evento
-function sendEvent(event) {
+/**
+ * Determina o tipo de evento baseado na estratégia de negócio
+ * @param {number} numeroEvento - Número sequencial do evento
+ * @returns {Object} { delta: number, tipo: string }
+ */
+function determinarTipoEvento(numeroEvento) {
+  if (numeroEvento < ESTRATEGIA_EVENTOS.REPOSICOES_INICIAIS) {
+    // Primeiros eventos: reposições para criar estoque
+    return {
+      delta: ESTRATEGIA_EVENTOS.DELTA_REPOSICAO_INICIAL,
+      tipo: 'reposição'
+    };
+  }
+  
+  // Eventos subsequentes: vendas ou reposições
+  const ehVenda = Math.random() < ESTRATEGIA_EVENTOS.PROBABILIDADE_VENDA;
+  
+  return {
+    delta: ehVenda ? ESTRATEGIA_EVENTOS.DELTA_VENDA : ESTRATEGIA_EVENTOS.DELTA_REPOSICAO_NORMAL,
+    tipo: ehVenda ? 'venda' : 'reposição'
+  };
+}
+
+/**
+ * Envia um evento para a API
+ * @param {Object} evento - Evento a ser enviado
+ * @returns {Promise<Object>} Resposta da API
+ */
+function enviarEvento(evento) {
   return new Promise((resolve, reject) => {
-    const postData = JSON.stringify(event);
+    const dadosPost = JSON.stringify(evento);
     
-    const options = {
+    const opcoes = {
       hostname: 'localhost',
-      port: 3000,
-      path: config.endpoint,
+      port: CONFIG.PORTA,
+      path: CONFIG.ENDPOINT,
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(postData)
+        'Content-Length': Buffer.byteLength(dadosPost)
       }
     };
     
-    const req = http.request(options, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
+    const requisicao = http.request(opcoes, (resposta) => {
+      let dados = '';
+      
+      resposta.on('data', chunk => dados += chunk);
+      resposta.on('end', () => {
         try {
-          const response = JSON.parse(data);
-          resolve({ status: res.statusCode, data: response });
-        } catch (e) {
-          resolve({ status: res.statusCode, data: data });
+          const respostaJson = JSON.parse(dados);
+          resolve({ 
+            status: resposta.statusCode, 
+            dados: respostaJson 
+          });
+        } catch (erro) {
+          resolve({ 
+            status: resposta.statusCode, 
+            dados: dados 
+          });
         }
       });
     });
     
-    req.on('error', reject);
-    req.write(postData);
-    req.end();
+    requisicao.on('error', reject);
+    requisicao.write(dadosPost);
+    requisicao.end();
   });
 }
 
-// Processar evento
-async function processEvent(eventNumber) {
-  try {
-    const lojas = ['loja_001', 'loja_002'];
-    const produtos = ['PROD_A', 'PROD_B'];
-    
-    const loja = lojas[Math.floor(Math.random() * lojas.length)];
-    const sku = produtos[Math.floor(Math.random() * produtos.length)];
-    
-    const event = generateEvent(loja, sku, eventNumber);
-    const tipo = event.delta > 0 ? 'reposição' : 'venda';
-    
-    console.log(`📤 ${tipo}: ${event.sku} (${event.delta}) - v${event.versao}`);
-    
-    const response = await sendEvent(event);
-    
-    if (response.status === 201 || response.status === 200) {
-      if (response.data && response.data.aplicado) {
-        console.log(`✅ Aplicado: ${response.data.status}`);
-        counters.applied++;
-      } else if (response.data && !response.data.aplicado) {
-        console.log(`⚠️  Ignorado: ${response.data.status}`);
-        counters.ignored++;
-      } else {
-        console.log(`✅ Evento processado (status: ${response.status})`);
-        counters.applied++;
-      }
-    } else if (response.status === 400) {
-      console.log(`⚠️  Rejeitado: ${response.data?.message || 'Bad Request'}`);
-      counters.ignored++;
+/**
+ * Interpreta a resposta da API e atualiza contadores
+ * @param {Object} resposta - Resposta da API
+ * @returns {string} Status do processamento
+ */
+function interpretarResposta(resposta) {
+  if (resposta.status === 201 || resposta.status === 200) {
+    if (resposta.dados && resposta.dados.aplicado) {
+      contadores.aplicados++;
+      return `✅ Aplicado: ${resposta.dados.status}`;
+    } else if (resposta.dados && !resposta.dados.aplicado) {
+      contadores.ignorados++;
+      return `⚠️  Ignorado: ${resposta.dados.status}`;
     } else {
-      console.log(`❌ Erro: ${response.status}`);
-      counters.errors++;
+      contadores.aplicados++;
+      return `✅ Evento processado (status: ${resposta.status})`;
     }
-    
-    counters.total++;
-    
-  } catch (error) {
-    console.log(`❌ Erro: ${error.message}`);
-    counters.errors++;
-    counters.total++;
+  } else if (resposta.status === 400) {
+    contadores.ignorados++;
+    return `⚠️  Rejeitado: ${resposta.dados?.message || 'Bad Request'}`;
+  } else {
+    contadores.erros++;
+    return `❌ Erro: ${resposta.status}`;
   }
 }
 
-// Executar simulação
-async function runSimulation() {
+// ============================================================================
+// FUNÇÕES PRINCIPAIS
+// ============================================================================
+
+/**
+ * Processa um evento individual
+ * @param {number} numeroEvento - Número sequencial do evento
+ */
+async function processarEvento(numeroEvento) {
+  try {
+    // Seleciona loja e produto aleatoriamente
+    const loja = LOJAS[Math.floor(Math.random() * LOJAS.length)];
+    const sku = PRODUTOS[Math.floor(Math.random() * PRODUTOS.length)];
+    
+    // Gera e envia o evento
+    const evento = gerarEvento(loja, sku, numeroEvento);
+    const tipo = evento.delta > 0 ? 'reposição' : 'venda';
+    
+    console.log(`📤 ${tipo}: ${evento.sku} (${evento.delta}) - v${evento.versao}`);
+    
+    const resposta = await enviarEvento(evento);
+    const statusProcessamento = interpretarResposta(resposta);
+    
+    console.log(statusProcessamento);
+    contadores.total++;
+    
+  } catch (erro) {
+    console.log(`❌ Erro: ${erro.message}`);
+    contadores.erros++;
+    contadores.total++;
+  }
+}
+
+/**
+ * Executa a simulação completa
+ */
+async function executarSimulacao() {
   console.log('🚀 Simulador iniciado\n');
   
-  initializeVersions();
+  inicializarVersoes();
   
-  let current = 0;
-  const interval = setInterval(async () => {
-    if (current >= config.totalEvents) {
-      clearInterval(interval);
-      printSummary();
+  let eventoAtual = 0;
+  const intervalo = setInterval(async () => {
+    if (eventoAtual >= CONFIG.TOTAL_EVENTOS) {
+      clearInterval(intervalo);
+      exibirResumo();
       return;
     }
     
-    await processEvent(current);
-    current++;
+    await processarEvento(eventoAtual);
+    eventoAtual++;
     
-    if (current % 5 === 0) {
-      console.log(`📊 ${current}/${config.totalEvents}\n`);
+    // Exibe progresso a cada 5 eventos
+    if (eventoAtual % 5 === 0) {
+      console.log(`📊 ${eventoAtual}/${CONFIG.TOTAL_EVENTOS}\n`);
     }
-  }, config.eventInterval);
+  }, CONFIG.INTERVALO_EVENTOS);
 }
 
-// Resumo
-function printSummary() {
+/**
+ * Exibe o resumo final da simulação
+ */
+function exibirResumo() {
   console.log('\n📊 RESUMO');
   console.log('==========');
-  console.log(`Total: ${counters.total}`);
-  console.log(`Aplicados: ${counters.applied}`);
-  console.log(`Ignorados: ${counters.ignored}`);
-  console.log(`Erros: ${counters.errors}`);
+  console.log(`Total: ${contadores.total}`);
+  console.log(`Aplicados: ${contadores.aplicados}`);
+  console.log(`Ignorados: ${contadores.ignorados}`);
+  console.log(`Erros: ${contadores.erros}`);
   console.log('\n✅ Simulação concluída!');
 }
 
-// Executar
+// ============================================================================
+// EXECUÇÃO
+// ============================================================================
 if (require.main === module) {
-  runSimulation().catch(console.error);
+  executarSimulacao().catch(console.error);
 } 

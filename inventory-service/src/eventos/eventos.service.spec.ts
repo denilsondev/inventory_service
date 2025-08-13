@@ -79,14 +79,40 @@ describe('EventosService', () => {
       estoqueRepository.obterPorLojaESku.mockResolvedValue(null);
       
       prismaService.$transaction.mockImplementation(async (callback) => {
-        return await callback({
+        const mockTransaction = {
           estoquePorLoja: {
-            upsert: jest.fn().mockResolvedValue(mockEstoque)
+            upsert: jest.fn().mockResolvedValue(mockEstoque),
+            findUnique: jest.fn(),
+            findMany: jest.fn(),
+            create: jest.fn(),
+            update: jest.fn(),
+            delete: jest.fn(),
+            findFirst: jest.fn(),
+            findFirstOrThrow: jest.fn(),
+            findUniqueOrThrow: jest.fn(),
+            updateMany: jest.fn(),
+            deleteMany: jest.fn(),
+            aggregate: jest.fn(),
+            count: jest.fn(),
+            groupBy: jest.fn()
           },
           eventoProcessado: {
-            create: jest.fn().mockResolvedValue({})
+            create: jest.fn().mockResolvedValue({}),
+            findUnique: jest.fn(),
+            findMany: jest.fn(),
+            update: jest.fn(),
+            delete: jest.fn(),
+            findFirst: jest.fn(),
+            findFirstOrThrow: jest.fn(),
+            findUniqueOrThrow: jest.fn(),
+            updateMany: jest.fn(),
+            deleteMany: jest.fn(),
+            aggregate: jest.fn(),
+            count: jest.fn(),
+            groupBy: jest.fn()
           }
-        } as any);
+        };
+        return await callback(mockTransaction as any);
       });
 
       // Act
