@@ -9,17 +9,15 @@ export class EstoqueController {
   constructor(private readonly service: EstoqueService) {}
 
   @Get(':sku')
-  @ApiOperation({ summary: 'Consultar inventário por SKU' })
-
-
+  @ApiOperation({ summary: 'Consultar estoque por SKU' })
   consultarInventario(
     @Param('sku') sku: string,
-    @Query('storeId') storeId?: string,
-    @Query('includeStores') includeStores?: string
+    @Query('idLoja') storeId?: string,
+    @Query('lojasInclusas') includeStores?: string
   ): Promise<EstoqueResponseDto> {
 
     const shouldIncludeStores = includeStores === 'true';
     return this.service.consultarInventario(sku, storeId, shouldIncludeStores);
-    
+
   }
 } 

@@ -1,5 +1,5 @@
 -- CreateTable
-CREATE TABLE "InventarioPorLoja" (
+CREATE TABLE "EstoquePorLoja" (
     "idLoja" TEXT NOT NULL,
     "sku" TEXT NOT NULL,
     "quantidade" INTEGER NOT NULL,
@@ -16,4 +16,4 @@ CREATE TABLE "EventoProcessado" (
 );
 
 -- CreateIndex
-CREATE INDEX "idx_inventario_sku" ON "InventarioPorLoja"("sku");
+CREATE INDEX "idx_estoque_sku" ON "EstoquePorLoja"("sku");

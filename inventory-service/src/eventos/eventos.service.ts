@@ -1,12 +1,12 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { EstoqueAjustadoEventoDto } from './dto/estoque-ajustado.dto';
 import { EstoqueAjustadoResponseDto } from './dto/estoque-ajustado-response.dto';
-import { InventarioPorLoja } from '@prisma/client';
-
+import { EstoquePorLoja } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { EstoqueRepository } from 'src/inventory/estoque-repository';
-import { EventRepository } from './repository/event.repository';
-import { MetricsService } from 'src/metrics/metrics.service';
+import { EventRepository } from './event.repository';
+import { MetricasService } from 'src/metrics/metricas.service';
+import { EstoqueRepository } from 'src/estoque/estoque.repository';
+
 
 @Injectable()
 export class EventosService {
@@ -16,7 +16,7 @@ export class EventosService {
     private readonly estoqueRepository: EstoqueRepository,
     private readonly eventRepository: EventRepository,
     private readonly prisma: PrismaService,
-    private readonly metricsService: MetricsService
+    private readonly metricasService: MetricasService
   ) {}
 
   async receberAjusteEstoque(dto: EstoqueAjustadoEventoDto): Promise<EstoqueAjustadoResponseDto> {
@@ -41,7 +41,7 @@ export class EventosService {
       // Executar operações em transação para garantir atomicidade
       const estoqueAtualizado = await this.processarTransacao(dto, estoqueAtual);
 
-      this.metricsService.incrementEventsApplied();
+      this.metricasService.incrementaEventosAplicados();
 
       return this.buildSuccessResponse(dto, estoqueAtualizado, gapDetected, estoqueAtual);
     } catch (error) {
@@ -57,7 +57,7 @@ export class EventosService {
   private async lancarEventoDuplicado(dto: EstoqueAjustadoEventoDto): Promise<EstoqueAjustadoResponseDto> {
     this.logger.warn(`Evento ${dto.idEvento} já foi processado anteriormente`);
 
-    this.metricsService.incrementaEventoIgnorado('duplicado');
+    this.metricasService.incrementaEventosIgnorados('duplicado');
     
     // Buscar inventário atual para retornar status
     const currentInventory = await this.estoqueRepository.obterPorLojaESku(dto.idLoja, dto.sku);
@@ -65,24 +65,24 @@ export class EventosService {
     return this.buildResponse(false, 'evento_duplicado', currentInventory);
   }
 
-  private async lancarVersaoDesatualizada(dto: EstoqueAjustadoEventoDto, estoqueAtual: InventarioPorLoja): Promise<EstoqueAjustadoResponseDto> {
+  private async lancarVersaoDesatualizada(dto: EstoqueAjustadoEventoDto, estoqueAtual: EstoquePorLoja): Promise<EstoqueAjustadoResponseDto> {
     this.logger.warn(`Versão do evento ${dto.versao} não é válida. Versão atual: ${estoqueAtual.versao}`);
 
-    this.metricsService.incrementaEventoIgnorado('desatualizado');
+    this.metricasService.incrementaEventosIgnorados('desatualizado');
     
     return this.buildResponse(false, 'versao_desatualizada', estoqueAtual);
   }
 
-  private detectarGap(dto: EstoqueAjustadoEventoDto, estoqueAtual: InventarioPorLoja | null): boolean {
+  private detectarGap(dto: EstoqueAjustadoEventoDto, estoqueAtual: EstoquePorLoja | null): boolean {
     if (estoqueAtual && dto.versao > estoqueAtual.versao + 1) {
       this.logger.warn(`Gap de versão detectado! Versão atual: ${estoqueAtual.versao}, Versão do evento: ${dto.versao}`);
-      this.metricsService.incrementGapDetected();
+      this.metricasService.incrementaGapsDetectados();
       return true;
     }
     return false;
   }
 
-  private buildResponse(aplicado: boolean, status: string, estoque: InventarioPorLoja | null): EstoqueAjustadoResponseDto {
+  private buildResponse(aplicado: boolean, status: string, estoque: EstoquePorLoja | null): EstoqueAjustadoResponseDto {
     const response = new EstoqueAjustadoResponseDto();
     response.aplicado = aplicado;
     response.status = status as any;
@@ -91,14 +91,19 @@ export class EventosService {
     return response;
   }
 
-  private async processarTransacao(dto: EstoqueAjustadoEventoDto, estoqueAtual: InventarioPorLoja | null): Promise<InventarioPorLoja> {
+  private async processarTransacao(dto: EstoqueAjustadoEventoDto, estoqueAtual: EstoquePorLoja | null): Promise<EstoquePorLoja> {
     return await this.prisma.$transaction(async (tx) => {
       // Calcular nova quantidade aplicando o delta
       const quantidadeAtual = estoqueAtual?.quantidade ?? 0;
       const quantidadeNova = quantidadeAtual + dto.delta;
 
+      // Validar se o estoque não ficará negativo
+      if (quantidadeNova < 0) {
+        throw new BadRequestException(`Estoque não pode ficar negativo. Quantidade atual: ${quantidadeAtual}, Delta: ${dto.delta}, Resultado: ${quantidadeNova}`);
+      }
+
       // Aplicar ajuste no inventário diretamente
-      const inventory = await tx.inventarioPorLoja.upsert({
+      const estoque = await tx.estoquePorLoja.upsert({
         where: {
           idLoja_sku: { idLoja: dto.idLoja, sku: dto.sku }
         },
@@ -120,23 +125,23 @@ export class EventosService {
         data: { idEvento: dto.idEvento }
       });
 
-      return inventory;
+      return estoque;
     });
   }
 
   private buildSuccessResponse(
     dto: EstoqueAjustadoEventoDto, 
-    updatedInventory: InventarioPorLoja, 
+    estoqueAtualizado: EstoquePorLoja, 
     gapDetected: boolean,
-    estoqueAtual: InventarioPorLoja | null
+    estoqueAtual: EstoquePorLoja | null
   ): EstoqueAjustadoResponseDto {
-    const response = this.buildResponse(true, gapDetected ? 'gap_detectado' : 'aplicado', updatedInventory);
+    const response = this.buildResponse(true, gapDetected ? 'gap_detectado' : 'aplicado', estoqueAtualizado);
 
     this.logger.log(`Evento ${dto.idEvento} processado com sucesso`, {
       idEvento: dto.idEvento,
       previousQuantity: estoqueAtual?.quantidade ?? 0,
-      newQuantity: updatedInventory.quantidade,
-      versao: updatedInventory.versao,
+      newQuantity: estoqueAtualizado.quantidade,
+      versao: estoqueAtualizado.versao,
       gapDetected
     });
 

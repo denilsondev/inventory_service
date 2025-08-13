@@ -2,12 +2,12 @@ import { Module } from '@nestjs/common';
 import { EventosController } from './eventos.controller';
 import { EventosService } from './eventos.service';
 import { PrismaModule } from '../prisma/prisma.module';
-import { InventoryModule } from '../inventory/estoque.module';
-import { MetricsModule } from '../metrics/metrics.module';
-import { EventRepository } from './repository/event.repository';
+import { EstoqueModule } from '../estoque/estoque.module';
+import { MetricsModule } from '../metrics/metricas.module';
+import { EventRepository } from './event.repository';
 
 @Module({
-  imports: [PrismaModule, InventoryModule, MetricsModule],
+  imports: [PrismaModule, EstoqueModule, MetricsModule],
   controllers: [EventosController],
   providers: [EventosService, EventRepository /* outros providers */],
 })

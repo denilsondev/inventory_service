@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { EstoqueResponseDto } from './dto/estoque-response.dto';
-import { InventarioPorLoja } from '@prisma/client';
-import { EstoqueRepository } from './estoque-repository';
+import { EstoquePorLoja } from '@prisma/client';
+import { EstoqueRepository } from './estoque.repository';
 
 @Injectable()
 export class EstoqueService {
@@ -27,7 +27,7 @@ export class EstoqueService {
     return response;
   }
 
-  private async obterEstoques(sku: string, idLoja?: string): Promise<InventarioPorLoja[]> {
+  private async obterEstoques(sku: string, idLoja?: string): Promise<EstoquePorLoja[]> {
     if (idLoja) {
       const estoque = await this.estoqueRepository.obterPorLojaESku(idLoja, sku);
       if (!estoque) {
@@ -46,7 +46,7 @@ export class EstoqueService {
   private construirResposta(
     sku: string, 
     quantidadeTotal: number, 
-    estoques: InventarioPorLoja[], 
+    estoques: EstoquePorLoja[], 
     lojaIncluida: boolean
   ): EstoqueResponseDto {
     const response = new EstoqueResponseDto();

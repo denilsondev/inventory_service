@@ -11,7 +11,7 @@ datasource db {
 }
 
 
-model InventarioPorLoja {
+model EstoquePorLoja {
   idLoja        String   
   sku           String   
   quantidade    Int      
@@ -19,7 +19,7 @@ model InventarioPorLoja {
   atualizadoEm  DateTime @default(now()) 
 
   @@id([idLoja, sku]) // Chave primária composta: loja + produto
-  @@index([sku], name: "idx_inventario_sku") // Índice para consultas por produto
+  @@index([sku], name: "idx_estoque_sku") // Índice para consultas por produto
 }
 
 

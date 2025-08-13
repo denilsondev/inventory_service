@@ -14,28 +14,18 @@ async function bootstrap() {
 
   // Configuração do Swagger
   const config = new DocumentBuilder()
-    .setTitle('Inventory Service API')
-    .setDescription('Sistema de inventário distribuído com controle de versão e idempotência')
+    .setTitle('Sistema de Estoque')
+    .setDescription('API para gestão de estoque com controle de versão')
     .setVersion('1.0')
-    .addTag('eventos', 'Endpoints para receber eventos de ajuste de estoque')
-    .addTag('inventory', 'Endpoints para consultar inventário')
-    .addTag('health', 'Endpoints de saúde do sistema')
-    .addTag('metrics', 'Métricas Prometheus do sistema')
     .build();
   
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api', app, document, {
-    swaggerOptions: {
-      tagsSorter: 'alpha',
-      operationsSorter: 'alpha',
-    },
-  });
+  SwaggerModule.setup('api', app, document);
   
-  const port = process.env.PORT ?? 4000;
+  const port = process.env.PORT ?? 3000;
   await app.listen(port);
   
-  logger.log(`🚀 Application is running on: http://localhost:${port}`);
-  logger.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
-  logger.log(`📚 Swagger documentation: http://localhost:${port}/api`);
+  logger.log(`Application rodando em: http://localhost:${port}`);
+  logger.log(`Swagger: http://localhost:${port}/api`);
 }
 bootstrap();

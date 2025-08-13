@@ -1,116 +1,70 @@
 #!/usr/bin/env node
 
-const fs = require('fs');
-const path = require('path');
-const https = require('https');
 const http = require('http');
 
-// Carregar configuração
-const config = JSON.parse(fs.readFileSync('./simulator-config.json', 'utf8'));
-
-// Estado global para controle de versões
-const versionState = new Map(); // (storeId, sku) -> version
-const eventCounters = {
-  total: 0,
-  applied: 0,
-  ignored: 0,
-  errors: 0,
-  duplicates: 0
+// Configuração simples
+const config = {
+  baseUrl: 'http://localhost:3000',
+  endpoint: '/v1/eventos/estoque-ajustado',
+  totalEvents: 20,
+  eventInterval: 1000
 };
 
-// Inicializar estado de versões
-function initializeVersionState() {
-  console.log('🔄 Inicializando estado de versões...');
-  
-  config.stores.forEach(storeId => {
-    config.products.forEach(product => {
-      const key = `${storeId}:${product.sku}`;
-      versionState.set(key, product.initialVersion);
-      console.log(`  ${key} -> versão ${product.initialVersion}`);
+// Estado de versões
+const versionState = new Map();
+const counters = { total: 0, applied: 0, ignored: 0, errors: 0 };
+
+// Inicializar versões
+function initializeVersions() {
+  console.log('🔄 Inicializando versões...');
+  ['loja_001', 'loja_002'].forEach(loja => {
+    ['PROD_A', 'PROD_B'].forEach(sku => {
+      const key = `${loja}:${sku}`;
+      versionState.set(key, 1);
+      console.log(`  ${key} -> v1`);
     });
   });
-  
-  console.log('✅ Estado de versões inicializado\n');
+  console.log('✅ Versões inicializadas\n');
 }
 
-// Gerar ID único para evento
-function generateEventId() {
-  return `evt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-}
-
-// Gerar evento de ajuste de estoque
-function generateStockEvent(storeId, sku) {
-  const key = `${storeId}:${sku}`;
-  const currentVersion = versionState.get(key);
-  const nextVersion = currentVersion + 1;
+// Gerar evento
+function generateEvent(loja, sku) {
+  const key = `${loja}:${sku}`;
+  const versao = versionState.get(key);
+  versionState.set(key, versao + 1);
   
-  // 80% vendas (-1), 20% reposição (+5)
-  const isSale = Math.random() < config.simulation.salesRatio;
-  const delta = isSale ? -1 : 5;
-  const eventType = isSale ? 'venda' : 'reposição';
+  const isVenda = Math.random() < 0.8;
+  const delta = isVenda ? -1 : 3;
   
-  // Gerar evento
-  const event = {
-    eventId: generateEventId(),
-    storeId,
-    sku,
-    delta,
-    version: nextVersion,
-    occurredAt: new Date().toISOString()
+  return {
+    idEvento: `evt_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+    idLoja: loja,
+    sku: sku,
+    delta: delta,
+    versao: versao + 1,
+    dataAtualizacao: new Date().toISOString()
   };
-  
-  // Atualizar versão no estado local
-  versionState.set(key, nextVersion);
-  
-  return { event, eventType, nextVersion };
 }
 
-// Função de retry com backoff simples
-async function sendEventWithRetry(event, attempt = 1) {
-  const maxRetries = config.api.retries;
-  const retryDelay = config.api.retryDelay * attempt;
-  
-  try {
-    const response = await sendEvent(event);
-    return response;
-  } catch (error) {
-    if (attempt <= maxRetries) {
-      console.log(`⚠️  Tentativa ${attempt} falhou, tentando novamente em ${retryDelay}ms...`);
-      await new Promise(resolve => setTimeout(resolve, retryDelay));
-      return sendEventWithRetry(event, attempt + 1);
-    } else {
-      throw new Error(`Falha após ${maxRetries} tentativas: ${error.message}`);
-    }
-  }
-}
-
-// Enviar evento para a API
+// Enviar evento
 function sendEvent(event) {
   return new Promise((resolve, reject) => {
-    const url = new URL(config.api.endpoint, config.api.baseUrl);
-    const isHttps = url.protocol === 'https:';
-    const client = isHttps ? https : http;
-    
     const postData = JSON.stringify(event);
+    
     const options = {
-      hostname: url.hostname,
-      port: url.port || (isHttps ? 443 : 80),
-      path: url.pathname,
+      hostname: 'localhost',
+      port: 3000,
+      path: config.endpoint,
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Content-Length': Buffer.byteLength(postData)
-      },
-      timeout: config.api.timeout
+      }
     };
     
-    const req = client.request(options, (res) => {
+    const req = http.request(options, (res) => {
       let data = '';
-      
-      res.on('data', (chunk) => {
-        data += chunk;
-      });
-      
+      res.on('data', chunk => data += chunk);
       res.on('end', () => {
         try {
           const response = JSON.parse(data);
@@ -121,118 +75,85 @@ function sendEvent(event) {
       });
     });
     
-    req.on('error', (error) => {
-      reject(error);
-    });
-    
-    req.on('timeout', () => {
-      req.destroy();
-      reject(new Error('Timeout'));
-    });
-    
+    req.on('error', reject);
     req.write(postData);
     req.end();
   });
 }
 
 // Processar evento
-async function processEvent(storeId, sku) {
+async function processEvent() {
   try {
-    // Gerar evento
-    const { event, eventType, nextVersion } = generateStockEvent(storeId, sku);
+    const lojas = ['loja_001', 'loja_002'];
+    const produtos = ['PROD_A', 'PROD_B'];
     
-    console.log(`📤 Enviando ${eventType}: ${event.eventId}`);
-    console.log(`   Store: ${storeId}, SKU: ${sku}, Delta: ${event.delta}, Versão: ${nextVersion}`);
+    const loja = lojas[Math.floor(Math.random() * lojas.length)];
+    const sku = produtos[Math.floor(Math.random() * produtos.length)];
     
-    // Enviar com retry
-    const response = await sendEventWithRetry(event);
+    const event = generateEvent(loja, sku);
+    const tipo = event.delta > 0 ? 'reposição' : 'venda';
     
-    // Processar resposta
-    if (response.status === 202) {
-      console.log(`✅ Evento aplicado: ${response.data.status}`);
-      eventCounters.applied++;
-    } else if (response.status === 200) {
-      console.log(`⚠️  Evento não aplicado: ${response.data.status}`);
-      eventCounters.ignored++;
+    console.log(`📤 ${tipo}: ${event.sku} (${event.delta}) - v${event.versao}`);
+    
+    const response = await sendEvent(event);
+    
+    if (response.status === 202 || response.status === 200) {
+      if (response.data.aplicado) {
+        console.log(`✅ Aplicado: ${response.data.status}`);
+        counters.applied++;
+      } else {
+        console.log(`⚠️  Ignorado: ${response.data.status}`);
+        counters.ignored++;
+      }
     } else {
-      console.log(`❌ Erro inesperado: ${response.status}`);
-      eventCounters.errors++;
+      console.log(`❌ Erro: ${response.status}`);
+      counters.errors++;
     }
     
-    eventCounters.total++;
+    counters.total++;
     
   } catch (error) {
-    console.log(`❌ Erro ao processar evento: ${error.message}`);
-    eventCounters.errors++;
-    eventCounters.total++;
+    console.log(`❌ Erro: ${error.message}`);
+    counters.errors++;
+    counters.total++;
   }
-}
-
-// Simular duplicação ocasional
-function shouldDuplicate() {
-  return Math.random() < config.simulation.duplicationChance;
 }
 
 // Executar simulação
 async function runSimulation() {
-  console.log('🚀 Iniciando simulação de eventos de estoque...\n');
+  console.log('🚀 Simulador iniciado\n');
   
-  initializeVersionState();
+  initializeVersions();
   
-  const totalEvents = config.simulation.totalEvents;
-  let currentEvent = 0;
-  
+  let current = 0;
   const interval = setInterval(async () => {
-    if (currentEvent >= totalEvents) {
+    if (current >= config.totalEvents) {
       clearInterval(interval);
       printSummary();
       return;
     }
     
-    // Selecionar loja e produto aleatoriamente
-    const storeId = config.stores[Math.floor(Math.random() * config.stores.length)];
-    const product = config.products[Math.floor(Math.random() * config.products.length)];
+    await processEvent();
+    current++;
     
-    // Processar evento
-    await processEvent(storeId, product.sku);
-    
-    // Duplicação ocasional para testar idempotência
-    if (shouldDuplicate()) {
-      console.log(`🔄 Duplicando evento para testar idempotência...`);
-      await processEvent(storeId, product.sku);
-      eventCounters.duplicates++;
+    if (current % 5 === 0) {
+      console.log(`📊 ${current}/${config.totalEvents}\n`);
     }
-    
-    currentEvent++;
-    console.log(`📊 Progresso: ${currentEvent}/${totalEvents}\n`);
-    
-  }, config.simulation.eventInterval);
+  }, config.eventInterval);
 }
 
-// Imprimir resumo
+// Resumo
 function printSummary() {
-  console.log('\n📊 RESUMO DA SIMULAÇÃO');
-  console.log('========================');
-  console.log(`Total de eventos: ${eventCounters.total}`);
-  console.log(`Eventos aplicados: ${eventCounters.applied}`);
-  console.log(`Eventos ignorados: ${eventCounters.ignored}`);
-  console.log(`Erros: ${eventCounters.errors}`);
-  console.log(`Duplicações: ${eventCounters.duplicates}`);
-  console.log('\n🎯 Simulação concluída!');
+  console.log('\n📊 RESUMO');
+  console.log('==========');
+  console.log(`Total: ${counters.total}`);
+  console.log(`Aplicados: ${counters.applied}`);
+  console.log(`Ignorados: ${counters.ignored}`);
+  console.log(`Erros: ${counters.errors}`);
+  console.log('\n✅ Simulação concluída!');
 }
 
-// Tratamento de erros não capturados
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('❌ Promessa rejeitada não tratada:', reason);
-  process.exit(1);
-});
-
-// Executar simulação
+// Executar
 if (require.main === module) {
-  runSimulation().catch(error => {
-    console.error('❌ Erro fatal na simulação:', error);
-    process.exit(1);
-  });
-}
-
-module.exports = { runSimulation, processEvent }; 
+  runSimulation().catch(console.error);
+} 
