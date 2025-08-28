@@ -6,15 +6,18 @@ import { PrismaService } from "../prisma/prisma.service";
 export class EventRepository {
     constructor(private readonly prisma: PrismaService) {}
 
-    async findByEventId(idEvento: string): Promise<EventoProcessado | null> {
+    async findByEventId(idEvento: string, idLoja: string): Promise<EventoProcessado | null> {
         return this.prisma.eventoProcessado.findUnique({
-            where: { idEvento }
+            where: { idEvento_idLoja: { idEvento, idLoja } }
         });
     }
 
-    async createEvent(idEvento:string): Promise<EventoProcessado> {
+    async createEvent(idEvento:string, idLoja:string): Promise<EventoProcessado> {
         return this.prisma.eventoProcessado.create({
-            data: {idEvento}
+            data: {
+                idEvento,
+                idLoja
+            }
         })
     }
 }

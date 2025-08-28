@@ -23,7 +23,7 @@ export class EventosService {
                this.logger.log(`${dto.idLoja}: ${dto.delta > 0 ? 'reposição' : 'venda'} ${dto.sku} (${dto.delta > 0 ? '+' : ''}${dto.delta}) v${dto.versao}`);
 
     try {
-      const eventoExistente = await this.eventRepository.findByEventId(dto.idEvento);
+      const eventoExistente = await this.eventRepository.findByEventId(dto.idEvento, dto.idLoja);
       if (eventoExistente) {
         return this.lancarEventoDuplicado(dto);
       }
@@ -129,7 +129,10 @@ export class EventosService {
 
       // Marcar evento como processado diretamente
       await tx.eventoProcessado.create({
-        data: { idEvento: dto.idEvento }
+        data: {
+           idEvento: dto.idEvento,
+           idLoja: dto.idLoja
+        }
       });
 
       return estoque;

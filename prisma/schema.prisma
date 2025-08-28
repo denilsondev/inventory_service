@@ -24,6 +24,9 @@ model EstoquePorLoja {
 
 
 model EventoProcessado {
-  idEvento  String   @id 
+  idEvento  String 
+  idLoja    String
   criadoEm  DateTime @default(now()) 
+  
+  @@id([idEvento, idLoja])
 }
