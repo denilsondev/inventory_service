@@ -102,7 +102,7 @@ describe('EventosService', () => {
 
     it('deve rejeitar evento duplicado', async () => {
       // Arrange
-      eventRepository.findByEventId.mockResolvedValue({ idEvento: 'evt_teste_001', criadoEm: new Date() });
+      eventRepository.findByEventId.mockResolvedValue({ idEvento: 'evt_teste_001', idLoja: 'loja_001', criadoEm: new Date() });
       estoqueRepository.obterPorLojaESku.mockResolvedValue(mockEstoque);
 
       // Act
